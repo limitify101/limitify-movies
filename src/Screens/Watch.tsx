@@ -129,7 +129,7 @@ const Watch = () => {
     }
     const linkProvider = (id: number, type: string): string => {
       if (server === 2) {
-        return type==="movie"? `https://vidsrc.to/embed/${type}/${id}`:`https://vidsrc.to/embed/${type}/${id}/${seasonAir}/${episodeAir}`;
+        return type==="movie"? `https://vidsrc.cc/embed/${type}/${id}`:`https://vidsrc.to/embed/${type}/${id}/${seasonAir}/${episodeAir}`;
       } else if (server === 1) {
         return type==="tv"? (`https://multiembed.mov/?video_id=${id}&tmdb=1&s=${seasonAir}&e=${episodeAir}`):(`https://multiembed.mov/?video_id=${id}&tmdb=1`);
       }
