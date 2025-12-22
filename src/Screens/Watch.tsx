@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Videocam, ListOutlined, PlayCircle} from "@mui/icons-material";
+import { Videocam, ListOutlined } from "@mui/icons-material";
 import { genreIds } from "../genreIds";
-import Footer from "../Components/Footer";
 import YoutubeTrailer from "../Components/YoutubeTrailer";
 import EpisodeComponent from "../Components/Episode";
+import OptimizedImage from "../Components/OptimizedImage";
+import { getAuthHeaders } from "../config/api";
 
 interface Cast {
   id: number;
@@ -32,18 +33,18 @@ const initContent = {
 type Season = typeof initSeason;
 
 const initSeason = {
-  id:0,
-  season_number:0,
-}
+  id: 0,
+  season_number: 0,
+};
 type Episode = typeof initEpisode;
 
 const initEpisode = {
-  id:0,
-  still_path:"",
-  title:"",
-  name:"",
-  episode_number:0,
-}
+  id: 0,
+  still_path: "",
+  title: "",
+  name: "",
+  episode_number: 0,
+};
 const Watch = () => {
   const location = useLocation();
   const [movieWatch, setMovieToWatch] = useState<Content>(initContent);
@@ -52,14 +53,12 @@ const Watch = () => {
   const [showPopup, setShowPopup] = useState<boolean>(false);
   const [movieCast, setMovieCast] = useState<Cast[]>([]);
   const [tvCast, setTvCast] = useState<Cast[]>([]);
-  const [seasons,setSeasons] = useState<[]>([]);
-  const [episodes,setEpisodes] = useState<[]>([]);
-  const [server,setServer] = useState(1);
-  const [serverLink,setServerLink] = useState("");
-  const [seasonAir,setSeasonAir] = useState(1);
-  const [episodeAir,setEpisodeAir] = useState(1);
-  const baseURL = "https://image.tmdb.org/t/p/original";
-    
+  const [seasons, setSeasons] = useState<[]>([]);
+  const [episodes, setEpisodes] = useState<[]>([]);
+  const [serverLink, setServerLink] = useState("");
+  const [seasonAir, setSeasonAir] = useState(1);
+  const [episodeAir, setEpisodeAir] = useState(1);
+
   const togglePopup = () => {
     setShowPopup(!showPopup);
   };
@@ -69,7 +68,7 @@ const Watch = () => {
       const response = await fetch(url, options);
       const data = await response.json();
       const videoKeys = data.results.map((result: any) => result.key);
-      
+
       if (videoKeys.length > 0) {
         setVidKey(videoKeys);
       } else {
@@ -81,78 +80,70 @@ const Watch = () => {
       setVidKey([]);
     }
   };
-  const fetchSeasons = async (id:number) =>{
-    try{
+  const fetchSeasons = async (id: number) => {
+    try {
       const fetchURL: string = `https://api.themoviedb.org/3/tv/${id}?language=en-US`;
-      const request = await fetch(fetchURL,options);
+      const request = await fetch(fetchURL, options);
       const data = await request.json();
       const fetchedSeasons = data.seasons;
       setSeasons(fetchedSeasons);
-      
-    }
-    catch (error) {
-      console.log("Error fetching seasons:",error);
+    } catch (error) {
+      console.log("Error fetching seasons:", error);
       setSeasons([]);
     }
   };
-  const fetchEpisodes = async(id:number,seasonNumber:number) => {
-    try{
+  const fetchEpisodes = async (id: number, seasonNumber: number) => {
+    try {
       const fetchURL: string = `https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}?language=en-US`;
-      const request = await fetch(fetchURL,options);
+      const request = await fetch(fetchURL, options);
       const data = await request.json();
       const fetchedEpisodes = data.episodes;
       setEpisodes(fetchedEpisodes);
-    } 
-    catch (error) {
-      console.log('Error fetching episodes:',error);
+    } catch (error) {
+      console.log("Error fetching episodes:", error);
       setEpisodes([]);
     }
-  }
-  //Respond to buttons changing the server to stream video
-  function changeServer(e:any){
-    const sv = parseInt(e.currentTarget.value);
-    setServer(sv);
-  }
-  function handleEpisode(episodeNumber:number){
+  };
+  function handleEpisode(episodeNumber: number) {
     setEpisodeAir(episodeNumber);
   }
   useEffect(() => {
-    if(location.state?.seasonSelected){
+    if (location.state?.seasonSelected) {
       const seasonPlaying = location.state?.seasonSelected;
       setSeasonAir(seasonPlaying);
       location.state.seasonSelected = null;
     }
-    if(location.state?.episodeSelected){
+    if (location.state?.episodeSelected) {
       const episodePlaying = location.state?.episodeSelected;
       setEpisodeAir(episodePlaying);
       location.state.episodeSelected = null;
     }
     const linkProvider = (id: number, type: string): string => {
-      if (server === 2) {
-        return type==="movie"? `https://vidsrc.cc/embed/${type}/${id}`:`https://vidsrc.to/embed/${type}/${id}/${seasonAir}/${episodeAir}`;
-      } else if (server === 1) {
-        return type==="tv"? (`https://multiembed.mov/?video_id=${id}&tmdb=1&s=${seasonAir}&e=${episodeAir}`):(`https://multiembed.mov/?video_id=${id}&tmdb=1`);
-      }
-      return "";
+      // Use vidsrc.to as the primary and only server
+      return type === "movie"
+        ? `https://vidsrc.to/embed/movie/${id}`
+        : `https://vidsrc.to/embed/tv/${id}/${seasonAir}/${episodeAir}`;
     };
-  
+
     const fetchMovieAndCast = async () => {
       if (location.state?.movieUp) {
         const movie = location.state?.movieUp as Content;
-        
+
         setMovieToWatch(movie);
         try {
           const response = await fetch(
-            `https://api.themoviedb.org/3/${movie.media_type || "movie"}/${movie.id}/credits?language=en-US`,
+            `https://api.themoviedb.org/3/${movie.media_type || "movie"}/${
+              movie.id
+            }/credits?language=en-US`,
             options
           );
           const data = await response.json();
           const casts = data.cast;
           setMovieCast(casts);
-  
+
           // Call fetchVideoTrailer after setting movieWatch state
           fetchVideoTrailer(movie.id, movie.media_type || "movie");
-          
+
           // Set the server link for movie
           setServerLink(linkProvider(movie.id, "movie"));
         } catch (error) {
@@ -160,12 +151,12 @@ const Watch = () => {
           setMovieCast([]);
         }
       }
-  
+
       if (location.state?.serieUp) {
         const serie = location.state?.serieUp as Content;
-        
+
         setSerieToWatch(serie);
-        
+
         try {
           const response = await fetch(
             `https://api.themoviedb.org/3/tv/${serie.id}/credits?language=en-US`,
@@ -174,12 +165,12 @@ const Watch = () => {
           const data = await response.json();
           const casts = data.cast;
           setTvCast(casts);
-  
+
           // Call fetchVideoTrailer after setting serieUp state
           fetchVideoTrailer(serie.id, serie.media_type || "tv");
           fetchSeasons(serie.id);
           fetchEpisodes(serie.id, seasonAir);
-  
+
           // Set the server link for series
           setServerLink(linkProvider(serie.id, "tv"));
         } catch (error) {
@@ -188,11 +179,17 @@ const Watch = () => {
         }
       }
     };
-  
+
     // Fetch movie and cast information
     fetchMovieAndCast();
-  }, [location.state?.movieUp, location.state?.serieUp, server,seasonAir,episodeAir,location.state?.seasonSelected,location.state?.episodeSelected]);
-  
+  }, [
+    location.state?.movieUp,
+    location.state?.serieUp,
+    seasonAir,
+    episodeAir,
+    location.state?.seasonSelected,
+    location.state?.episodeSelected,
+  ]);
 
   function filterGenres(ids: number[]): string[] {
     const movieGenres = genreIds.Ids[0];
@@ -204,43 +201,36 @@ const Watch = () => {
 
   const options = {
     method: "GET",
-    headers: {
-      accept: "application/json",
-      Authorization:
-        "Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODk4MGQ0MjA1ZTI2OWJmMmNkOGE3YTg2MzRhODA5NyIsIm5iZiI6MTcxOTA2NjE5NS42Mjc4NzcsInN1YiI6IjY2NjMzZGQ1NDQ2ZWIxNWU2MjE4OTAxNSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.YqpJSaf17UoDEDY-y5rSr7QDwHIBdcb9pZgiBVbq54c",
-    },
+    headers: getAuthHeaders(),
   };
-  
+
   return (
     <div className="w-screen mt-20 p-0 relative m-0 h-full">
       <div className="w-screen min-h-screen">
         {movieWatch.id !== 0 && (
           <div className="w-screen mt-20 p-0 relative m-0 h-full bg-[#0000005b]">
-          <div className="w-full h-screen sm:h-5/6 flex items-center justify-center p-4 bg-zinc-950 flex-col">
-            <iframe style={{border:0}} className="bg-[#0000005b] -mt-10 w-4/5 h-3/4" src={serverLink||""} allowFullScreen></iframe>
-            <div className="w-full flex flex-col items-center justify-center mt-5 py-4">
-            <p className="font-['Barlow'] font-light opacity-65 text-center w-full">If current server doesn't work please try other servers below</p>
-              <div className="flex mt-4">
-                <button className="p-2 mx-4 border rounded-md hover:text-[#f3b632f4] hover:border-[#f3b632f4] duration-200" onClick={changeServer} value={1} role="button">
-                  <PlayCircle/>
-                  <span className="mx-2">Server 1</span>
-                </button>
-                <button className="p-2 mx-4 border rounded-md hover:text-[#f3b632f4] hover:border-[#f3b632f4] duration-200" onClick={changeServer} value={2} role="button">
-                  <PlayCircle/>
-                  <span className="mx-2">Server 2</span>
-                </button>
+            <div className="w-full h-screen sm:h-5/6 flex items-center justify-center p-4 bg-zinc-950 flex-col">
+              <iframe
+                style={{ border: 0 }}
+                className="bg-[#0000005b] -mt-10 w-4/5 h-3/4"
+                src={serverLink || ""}
+                allowFullScreen
+              ></iframe>
+              <div className="w-full flex flex-col items-center justify-center mt-5 py-4">
+                <div className="flex flex-wrap items-center justify-center gap-4"></div>
               </div>
             </div>
-          </div>
-            <div
-              className="flex w-4/5 rounded-lg bg-[#0000005b] h-3/4 mb-20 sm:flex-col sm:w-full sm:h-5/6 py-2"
-            >
+            <div className="flex w-4/5 rounded-lg bg-[#0000005b] h-3/4 mb-20 sm:flex-col sm:w-full sm:h-5/6 py-2">
               <div className="flex justify-center items-center w-2/5 sm:w-full">
-                <img
-                  src={`${baseURL}${movieWatch.poster_path}`}
-                  alt="Movie Poster"
-                  className="h-2/3 rounded-sm w-2/5 sm:w-36 sm:h-52"
-                />
+                <div className="h-2/3 rounded-sm w-2/5 sm:w-36 sm:h-52 overflow-hidden">
+                  <OptimizedImage
+                    path={movieWatch.poster_path}
+                    alt={movieWatch.title || movieWatch.name || "Movie Poster"}
+                    type="poster"
+                    size="large"
+                    className="w-full h-full rounded-sm"
+                  />
+                </div>
               </div>
               <div className="flex flex-col w-3/5 justify-center sm:w-full sm:items-center">
                 <div
@@ -253,8 +243,11 @@ const Watch = () => {
                   }}
                 >
                   <h3>
-                    {(movieWatch.title || movieWatch.name || movieWatch.original_title)
-                      .toUpperCase()}
+                    {(
+                      movieWatch.title ||
+                      movieWatch.name ||
+                      movieWatch.original_title
+                    ).toUpperCase()}
                   </h3>
                 </div>
                 <div className="font-['Barlow'] text-sm font-light">
@@ -276,12 +269,12 @@ const Watch = () => {
                 <div className="w-full p-2 font-['Barlow'] font-light">
                   <h4>Overview:</h4>
                   <p className="font-['Barlow'] italic font-light h-fit text-sm">
-                    {movieWatch.overview||"NaN"}
+                    {movieWatch.overview || "NaN"}
                   </p>
                   <span className="flex justify-between w-1/2 my-1 sm:w-3/4">
                     <div className="flex">
                       <h4>Released:</h4>
-                      <p>{movieWatch.release_date||"NaN"}</p>
+                      <p>{movieWatch.release_date || "NaN"}</p>
                     </div>
                     <div className="flex">
                       <h4>Language:</h4>
@@ -290,7 +283,9 @@ const Watch = () => {
                   </span>
                   <span className="flex my-1">
                     <h4>Genre:</h4>
-                    <p>{filterGenres(movieWatch.genre_ids).join(",")||"NaN"}</p>
+                    <p>
+                      {filterGenres(movieWatch.genre_ids).join(",") || "NaN"}
+                    </p>
                   </span>
                   <span className="flex flex-col">
                     <h4>Casts:</h4>
@@ -310,15 +305,16 @@ const Watch = () => {
                               key={cast.id}
                               className="flex flex-col justify-between w-32 object-contain h-48"
                             >
-                              <img
-                                src={
-                                  cast.profile_path
-                                    ? `${baseURL}${cast.profile_path}`
-                                    : `https://placehold.co/65x100/000000/FFF`
-                                }
-                                alt={`${cast.name}`}
-                                className="rounded-md sm:w-20 sm:h-32 w-20 h-36"
-                              />
+                              <div className="rounded-md w-20 h-36 sm:w-20 sm:h-32 overflow-hidden">
+                                <OptimizedImage
+                                  path={cast.profile_path}
+                                  alt={cast.name}
+                                  type="profile"
+                                  size="medium"
+                                  className="w-full h-full rounded-md"
+                                  fallbackSrc="https://placehold.co/65x100/000000/FFF"
+                                />
+                              </div>
                               <span>
                                 <p className="font-light text-sm">
                                   {cast.name}
@@ -338,71 +334,93 @@ const Watch = () => {
                 </div>
               </div>
             </div>
-            
-            {showPopup && vidKey.length > 0 && <YoutubeTrailer handleClose={togglePopup} vidId={vidKey[Math.floor(Math.random() * (vidKey.length-1 + 1)) + 0]} />}
+
+            {showPopup && vidKey.length > 0 && (
+              <YoutubeTrailer
+                handleClose={togglePopup}
+                vidId={
+                  vidKey[
+                    Math.floor(Math.random() * (vidKey.length - 1 + 1)) + 0
+                  ]
+                }
+              />
+            )}
           </div>
         )}
         {serieWatch.id !== 0 && (
           <>
             <div className="w-screen mt-20 p-0 relative m-0 h-full bg-[#0000005b]">
-                <div className="w-full h-screen sm:h-5/6 flex items-center justify-center p-4 bg-zinc-950 flex-col">
-                  <iframe style={{border:0}} className="bg-[#0000005b] -mt-10 w-4/5 h-3/4 sm:h-3/5 sm:w-5/6" src={serverLink} allowFullScreen></iframe>
-                  <div className="w-full flex flex-col items-center justify-center mt-5 py-4">
-                    <p className="font-['Barlow'] font-light opacity-65 text-center w-full">If current server doesn't work please try other servers below</p>
-                    <div className="flex mt-4 sm:scale-90">
-                      <button className="p-2 mx-4 border rounded-md hover:text-[#f3b632f4] duration-200 hover:border-[#f3b632f4]" onClick={changeServer} value={1}>
-                        <PlayCircle/>
-                        <span className="mx-2">Server 1</span>
-                      </button>
-                      <button className="p-2 mx-4 border rounded-md hover:text-[#f3b632f4] duration-200 hover:border-[#f3b632f4]" onClick={changeServer} value={2}>
-                        <PlayCircle/>
-                        <span className="mx-2">Server 2</span>
-                      </button>
-                    </div>
-                  </div>
+              <div className="w-full h-screen sm:h-5/6 flex items-center justify-center p-4 bg-zinc-950 flex-col">
+                <iframe
+                  style={{ border: 0 }}
+                  className="bg-[#0000005b] -mt-10 w-4/5 h-3/4 sm:h-3/5 sm:w-5/6"
+                  src={serverLink}
+                  allowFullScreen
+                ></iframe>
+                <div className="w-full flex flex-col items-center justify-center mt-5 py-4">
+                  <div className="flex flex-wrap items-center justify-center gap-4"></div>
                 </div>
-                <div className="w-screen px-6">
-                  <div className="object-contain text-white flex rounded-md w-32 p-2 border justify-between font-light font-['Barlow'] cursor-pointer bg-black">
-                    <ListOutlined/>
-                    <select 
-                      name="Seasons" 
-                      id="Seasons" 
-                      className="bg-transparent outline-none w-24 cursor-pointer"
-                      onChange={(e)=>{
-                        const sn = parseInt(e.target.value.split(" ")[1],10);
-                        fetchEpisodes(serieWatch.id,sn);
-                        setSeasonAir(sn);
-                        setEpisodeAir(1);
-                      }}
-                    >
-                      {seasons.map((season:Season)=>(
-                        season.season_number !== 0?
-                        (
-                        <option value={`Season ${season.season_number}`} key={season.id} className="bg-black">{`Season ${season.season_number}`}</option>
-                        ):null
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex overflow-y-hidden overflow-x-scroll py-5" style={{ scrollbarWidth: "none" }}>
-                  {episodes.map((episode:Episode) => (
-                     <div key={episode.id} onClick={()=>handleEpisode(episode.episode_number)}>
-                       <EpisodeComponent episode={episode} playing={episodeAir === episode.episode_number ? true:false}/>
-                     </div>
-                  ))}
-                  </div>
+              </div>
+              <div className="w-screen px-6">
+                <div className="object-contain text-white flex rounded-md w-32 p-2 border justify-between font-light font-['Barlow'] cursor-pointer bg-black">
+                  <ListOutlined />
+                  <select
+                    name="Seasons"
+                    id="Seasons"
+                    className="bg-transparent outline-none w-24 cursor-pointer"
+                    onChange={(e) => {
+                      const sn = parseInt(e.target.value.split(" ")[1], 10);
+                      fetchEpisodes(serieWatch.id, sn);
+                      setSeasonAir(sn);
+                      setEpisodeAir(1);
+                    }}
+                  >
+                    {seasons.map((season: Season) =>
+                      season.season_number !== 0 ? (
+                        <option
+                          value={`Season ${season.season_number}`}
+                          key={season.id}
+                          className="bg-black"
+                        >{`Season ${season.season_number}`}</option>
+                      ) : null
+                    )}
+                  </select>
                 </div>
                 <div
-                  className="flex w-4/5 rounded-lg bg-[#0000005b] h-3/4 mb-20 sm:flex-col sm:w-full sm:h-5/6 py-2 justify-center items-center"
-                  style={{
-                    backdropFilter: "blur(5px)",
-                  }}
+                  className="flex overflow-y-hidden overflow-x-scroll py-5"
+                  style={{ scrollbarWidth: "none" }}
                 >
+                  {episodes.map((episode: Episode) => (
+                    <div
+                      key={episode.id}
+                      onClick={() => handleEpisode(episode.episode_number)}
+                    >
+                      <EpisodeComponent
+                        episode={episode}
+                        playing={
+                          episodeAir === episode.episode_number ? true : false
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div
+                className="flex w-4/5 rounded-lg bg-[#0000005b] h-3/4 mb-20 sm:flex-col sm:w-full sm:h-5/6 py-2 justify-center items-center"
+                style={{
+                  backdropFilter: "blur(5px)",
+                }}
+              >
                 <div className="flex justify-center items-center w-2/5 sm:w-full">
-                  <img
-                    src={`${baseURL}${serieWatch.poster_path}`}
-                    alt="Serie Poster"
-                    className="h-1/2 rounded-sm w-1/2 sm:w-36 sm:h-52"
-                  />
+                  <div className="h-1/2 rounded-sm w-1/2 sm:w-36 sm:h-52 overflow-hidden">
+                    <OptimizedImage
+                      path={serieWatch.poster_path}
+                      alt={serieWatch.title || serieWatch.name || "Series Poster"}
+                      type="poster"
+                      size="large"
+                      className="w-full h-full rounded-sm"
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-col w-3/5 justify-center sm:w-full sm:items-center">
                   <div
@@ -415,8 +433,11 @@ const Watch = () => {
                     }}
                   >
                     <h3>
-                      {(serieWatch.title || serieWatch.name || serieWatch.original_title)
-                        .toUpperCase()}
+                      {(
+                        serieWatch.title ||
+                        serieWatch.name ||
+                        serieWatch.original_title
+                      ).toUpperCase()}
                     </h3>
                   </div>
                   <div className="font-['Barlow'] text-sm font-light">
@@ -426,7 +447,7 @@ const Watch = () => {
                         className="flex cursor-pointer mr-8 hover:text-[#f3b632f4] duration-200 items-center justify-center"
                         onClick={togglePopup}
                       >
-                        <Videocam fontSize="small"/>
+                        <Videocam fontSize="small" />
                         <p>Trailer</p>
                       </button>
                       <div className="mr-8">
@@ -435,11 +456,11 @@ const Watch = () => {
                     </span>
                     <span></span>
                   </div>
-                  
+
                   <div className="w-full p-2 font-['Barlow'] font-light">
                     <h4>Overview:</h4>
                     <p className="font-['Barlow'] italic font-light h-fit text-sm">
-                      {serieWatch.overview||"NaN"}
+                      {serieWatch.overview || "NaN"}
                     </p>
                     <span className="flex justify-between w-1/2 my-1 sm:w-3/4">
                       <div className="flex">
@@ -453,7 +474,9 @@ const Watch = () => {
                     </span>
                     <span className="flex my-1">
                       <h4>Genre:</h4>
-                      <p>{filterGenres(serieWatch.genre_ids).join(",")||"NaN"}</p>
+                      <p>
+                        {filterGenres(serieWatch.genre_ids).join(",") || "NaN"}
+                      </p>
                     </span>
                     <span className="flex flex-col">
                       <h4>Casts:</h4>
@@ -473,15 +496,16 @@ const Watch = () => {
                                 key={cast.id}
                                 className="flex flex-col justify-between w-32 object-contain h-48"
                               >
-                                <img
-                                  src={
-                                    cast.profile_path
-                                      ? `${baseURL}${cast.profile_path}`
-                                      : `https://placehold.co/65x100/000000/FFF`
-                                  }
-                                  alt={`${cast.name}`}
-                                  className="rounded-md sm:w-20 sm:h-48 w-20 h-36"
-                                />
+                                <div className="rounded-md w-20 h-36 sm:w-20 sm:h-48 overflow-hidden">
+                                  <OptimizedImage
+                                    path={cast.profile_path}
+                                    alt={cast.name}
+                                    type="profile"
+                                    size="medium"
+                                    className="w-full h-full rounded-md"
+                                    fallbackSrc="https://placehold.co/65x100/000000/FFF"
+                                  />
+                                </div>
                                 <span className="mb-10">
                                   <p className="font-light text-sm">
                                     {cast.name}
@@ -500,13 +524,21 @@ const Watch = () => {
                     </span>
                   </div>
                 </div>
-                </div>
               </div>
-            {showPopup && vidKey.length > 0 && <YoutubeTrailer handleClose={togglePopup} vidId={vidKey[Math.floor(Math.random() * (vidKey.length-1 + 1)) + 0]}/>}
+            </div>
+            {showPopup && vidKey.length > 0 && (
+              <YoutubeTrailer
+                handleClose={togglePopup}
+                vidId={
+                  vidKey[
+                    Math.floor(Math.random() * (vidKey.length - 1 + 1)) + 0
+                  ]
+                }
+              />
+            )}
           </>
         )}
       </div>
-      <Footer />
     </div>
   );
 };

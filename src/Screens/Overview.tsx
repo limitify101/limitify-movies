@@ -1,12 +1,17 @@
-import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { Videocam, PlayCircle, ListOutlined} from "@mui/icons-material";
+import { useEffect, useState, useLayoutEffect } from "react";
+import { useLocation, useParams } from "react-router-dom";
+import {
+  Videocam,
+  PlayCircle,
+  ListOutlined,
+  Schedule,
+} from "@mui/icons-material";
 import { genreIds } from "../genreIds";
-import Footer from "../Components/Footer";
 import YoutubeTrailer from "../Components/YoutubeTrailer";
 import { Link } from "react-router-dom";
 import EpisodeComponent from "../Components/Episode";
-import { useLayoutEffect } from "react";
+import { getAuthHeaders, API_CONFIG } from "../config/api";
+import { isLikelyAvailable } from "../utils/videoAvailability";
 interface Cast {
   id: number;
   name: string;
@@ -33,32 +38,37 @@ const initContent = {
 type Season = typeof initSeason;
 
 const initSeason = {
-  id:0,
-  season_number:0,
-}
+  id: 0,
+  season_number: 0,
+};
 type Episode = typeof initEpisode;
 
 const initEpisode = {
-  id:0,
-  still_path:"",
-  title:"",
-  name:"",
-  episode_number:0,
-}
+  id: 0,
+  still_path: "",
+  title: "",
+  name: "",
+  episode_number: 0,
+};
 const Overview = () => {
   const location = useLocation();
+  const { id } = useParams<{ id: string }>();
   const [movieUp, setMovieUp] = useState<Content>(initContent);
   const [serieUp, setSerieUp] = useState<Content>(initContent);
   const [vidKey, setVidKey] = useState<[]>([]);
   const [showPopup, setShowPopup] = useState<boolean>(false);
   const [movieCast, setMovieCast] = useState<Cast[]>([]);
   const [tvCast, setTvCast] = useState<Cast[]>([]);
-  const [seasons,setSeasons] = useState<[]>([]);
-  const [episodes,setEpisodes] = useState<[]>([]);
-  const [seasonSelected,setSeasonAir] = useState<number|null>(null);
-  const [episodeSelected,setEpisodeAir] = useState<number|null>(null);
-  const baseURL = "https://image.tmdb.org/t/p/original";
-    
+  const [seasons, setSeasons] = useState<[]>([]);
+  const [episodes, setEpisodes] = useState<[]>([]);
+  const [seasonSelected, setSeasonAir] = useState<number | null>(null);
+  const [episodeSelected, setEpisodeAir] = useState<number | null>(null);
+
+  const options = {
+    method: "GET",
+    headers: getAuthHeaders(),
+  };
+
   const togglePopup = () => {
     setShowPopup(!showPopup);
   };
@@ -68,7 +78,7 @@ const Overview = () => {
       const response = await fetch(url, options);
       const data = await response.json();
       const videoKeys = data.results.map((result: any) => result.key);
-      
+
       if (videoKeys.length > 0) {
         setVidKey(videoKeys);
       } else {
@@ -80,93 +90,98 @@ const Overview = () => {
       setVidKey([]);
     }
   };
-  const fetchSeasons = async (id:number) =>{
-    try{
+  const fetchSeasons = async (id: number) => {
+    try {
       const fetchURL: string = `https://api.themoviedb.org/3/tv/${id}?language=en-US`;
-      const request = await fetch(fetchURL,options);
+      const request = await fetch(fetchURL, options);
       const data = await request.json();
       const fetchedSeasons = data.seasons;
       setSeasons(fetchedSeasons);
-      
-    }
-    catch (error) {
-      console.log("Error fetching seasons:",error);
+    } catch (error) {
+      console.log("Error fetching seasons:", error);
       setSeasons([]);
     }
   };
-  const fetchEpisodes = async(id:number,seasonNumber:number) => {
-    try{
+  const fetchEpisodes = async (id: number, seasonNumber: number) => {
+    try {
       const fetchURL: string = `https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}?language=en-US`;
-      const request = await fetch(fetchURL,options);
+      const request = await fetch(fetchURL, options);
       const data = await request.json();
       const fetchedEpisodes = data.episodes;
       setEpisodes(fetchedEpisodes);
-      
-    } 
-    catch (error) {
-      console.log('Error fetching episodes:',error);
+    } catch (error) {
+      console.log("Error fetching episodes:", error);
       setEpisodes([]);
     }
-  }
-  function handleEpisode(episodeNumber:number){
+  };
+  function handleEpisode(episodeNumber: number) {
     setEpisodeAir(episodeNumber);
   }
   useLayoutEffect(() => {
-    document.documentElement.scrollTo({ top:0, left:0, behavior: "instant" });
-}, [location.pathname]);
+    document.documentElement.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location.pathname]);
 
   useEffect(() => {
-    const fetchMovieAndCast = async () => {
-      if (location.state?.movie) {
-        const movie = location.state?.movie as Content;
-        
-        setMovieUp(movie);
-        try {
-          const response = await fetch(
-            `https://api.themoviedb.org/3/${movie?.media_type||"movie"}/${movie.id}/credits?language=en-US`,
-            options
-          );
-          const data = await response.json();
-          const casts = data.cast;
-          setMovieCast(casts);
-  
-          // Call fetchVideoTrailer after setting movieUp state
-          fetchVideoTrailer(movie.id, movie.media_type||"movie");
-        } catch (error) {
-          console.log("Error fetching movie data:", error);
-          setMovieCast([]);
+    const fetchContent = async () => {
+      if (!id) return;
+
+      const isMovie = location.pathname.includes("/movies/");
+      const mediaType = isMovie ? "movie" : "tv";
+
+      try {
+        // Fetch main content details
+        const detailsResponse = await fetch(
+          `https://api.themoviedb.org/3/${mediaType}/${id}?language=en-US`,
+          options
+        );
+        const contentData = await detailsResponse.json();
+
+        const content: Content = {
+          id: contentData.id,
+          title: contentData.title || contentData.name,
+          poster_path: contentData.poster_path,
+          media_type: mediaType,
+          backdrop_path: contentData.backdrop_path,
+          name: contentData.name || contentData.title,
+          original_title:
+            contentData.original_title || contentData.original_name,
+          vote_average: contentData.vote_average,
+          overview: contentData.overview,
+          release_date: contentData.release_date || contentData.first_air_date,
+          original_language: contentData.original_language,
+          genre_ids: contentData.genres?.map((g: any) => g.id) || [],
+        };
+
+        if (isMovie) {
+          setMovieUp(content);
+        } else {
+          setSerieUp(content);
         }
-      }
-  
-      if (location.state?.serie) {
-        const serie = location.state?.serie as Content;
-        
-        setSerieUp(serie);
-        
-        try {
-          const response = await fetch(
-            `https://api.themoviedb.org/3/tv/${serie.id}/credits?language=en-US`,
-            options
-          );
-          const data = await response.json();
-          const casts = data.cast;
-          setTvCast(casts);
-  
-          // Call fetchVideoTrailer after setting serieUp state
-          fetchVideoTrailer(serie.id, serie.media_type||"tv");
-          fetchSeasons(serie.id);
-          fetchEpisodes(serie.id,1);
-        } catch (error) {
-          console.log("Error fetching serie data:", error);
-          setTvCast([]);
+
+        // Fetch cast
+        const creditsResponse = await fetch(
+          `https://api.themoviedb.org/3/${mediaType}/${id}/credits?language=en-US`,
+          options
+        );
+        const creditsData = await creditsResponse.json();
+
+        if (isMovie) {
+          setMovieCast(creditsData.cast || []);
+        } else {
+          setTvCast(creditsData.cast || []);
+          fetchSeasons(parseInt(id));
+          fetchEpisodes(parseInt(id), 1);
         }
+
+        // Fetch trailer
+        fetchVideoTrailer(parseInt(id), mediaType);
+      } catch (error) {
+        console.error("Error fetching content:", error);
       }
     };
-  
-    // Fetch movie and cast information
-    fetchMovieAndCast();
-  }, [location.state?.movie, location.state?.serie]);
-  
+
+    fetchContent();
+  }, [id, location.pathname]);
 
   function filterGenres(ids: number[]): string[] {
     const movieGenres = genreIds.Ids[0];
@@ -175,15 +190,6 @@ const Overview = () => {
       .filter((genre) => genre !== undefined);
     return filteredGenres;
   }
-
-  const options = {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-      Authorization:
-        "Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3ODk4MGQ0MjA1ZTI2OWJmMmNkOGE3YTg2MzRhODA5NyIsIm5iZiI6MTcxOTA2NjE5NS42Mjc4NzcsInN1YiI6IjY2NjMzZGQ1NDQ2ZWIxNWU2MjE4OTAxNSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.YqpJSaf17UoDEDY-y5rSr7QDwHIBdcb9pZgiBVbq54c",
-    },
-  };
 
   return (
     <div className="w-screen mt-20 p-0 relative m-0 h-full">
@@ -195,7 +201,7 @@ const Overview = () => {
               style={{
                 backgroundPosition: "center",
                 backgroundSize: "cover",
-                backgroundImage: `url(${baseURL}${movieUp.backdrop_path})`,
+                backgroundImage: `url(${API_CONFIG.TMDB_IMAGE_BASE_URL}/${API_CONFIG.TMDB_IMAGE_SIZES.backdrop.large}${movieUp.backdrop_path})`,
                 backgroundRepeat: "no-repeat",
               }}
             ></div>
@@ -208,7 +214,7 @@ const Overview = () => {
               >
                 <div className="flex justify-center items-center w-2/5 sm:w-full">
                   <img
-                    src={`${baseURL}${movieUp.poster_path}`}
+                    src={`${API_CONFIG.TMDB_IMAGE_BASE_URL}/${API_CONFIG.TMDB_IMAGE_SIZES.poster.large}${movieUp.poster_path}`}
                     alt="Movie Poster"
                     className="h-2/3 rounded-sm w-1/2 sm:w-36 sm:h-52 lg:w-44 lg:h-52 xl:w-48"
                   />
@@ -224,8 +230,12 @@ const Overview = () => {
                     }}
                   >
                     <h3>
-                      {(movieUp.title || movieUp.name || movieUp.original_title)
-                        .toUpperCase()}
+                      {(
+                        movieUp.title ||
+                        movieUp.name ||
+                        movieUp.original_title ||
+                        ""
+                      ).toUpperCase()}
                     </h3>
                   </div>
                   <div className="font-['Barlow'] text-sm font-light">
@@ -244,21 +254,37 @@ const Overview = () => {
                     </span>
                     <span></span>
                   </div>
-                  <Link to={`/watch/${(movieUp?.title || movieUp?.name).toLowerCase().split(" ").join("-")}-${movieUp?.id}`} state={{movieUp}}>
-                  <button className="sm:w-full bg-black rounded-md p-3 border-l-4 border-l-[#f3b83ae8] mt-4 font-['Barlow_Condensed'] flex items-center justify-center hover:opacity-50 hover:bg-[#f3b83ae8] hover:text-black duration-200 ease-in-out hover:border-l-0 hover:border-neutral-900 w-2/6">
+                  {isLikelyAvailable(movieUp.release_date) ? (
+                    <Link
+                      to={`/watch/${(movieUp?.title || movieUp?.name || "")
+                        .toLowerCase()
+                        .split(" ")
+                        .join("-")}-${movieUp?.id}`}
+                      state={{ movieUp }}
+                    >
+                      <button className="sm:w-full bg-black rounded-md p-3 border-l-4 border-l-[#f3b83ae8] mt-4 font-['Barlow_Condensed'] flex items-center justify-center hover:opacity-50 hover:bg-[#f3b83ae8] hover:text-black duration-200 ease-in-out hover:border-l-0 hover:border-neutral-900 w-2/6">
                         <PlayCircle />
                         <span className="w-full">WATCH NOW</span>
-                  </button>
-                  </Link>
+                      </button>
+                    </Link>
+                  ) : (
+                    <button
+                      disabled
+                      className="sm:w-full bg-gray-700 rounded-md p-3 border-l-4 border-l-yellow-500 mt-4 font-['Barlow_Condensed'] flex items-center justify-center cursor-not-allowed opacity-60 w-2/6"
+                    >
+                      <Schedule />
+                      <span className="w-full">COMING SOON</span>
+                    </button>
+                  )}
                   <div className="w-full p-2 font-['Barlow'] font-light">
                     <h4>Overview:</h4>
                     <p className="font-['Barlow'] italic font-light h-fit text-sm">
-                      {movieUp.overview||"NaN"}
+                      {movieUp.overview || "NaN"}
                     </p>
                     <span className="flex justify-between w-1/2 my-1 sm:w-3/4 xl:w-3/4 md:w-3/4">
                       <div className="flex">
                         <h4>Released:</h4>
-                        <p>{movieUp.release_date||"NaN"}</p>
+                        <p>{movieUp.release_date || "NaN"}</p>
                       </div>
                       <div className="flex">
                         <h4>Language:</h4>
@@ -267,7 +293,9 @@ const Overview = () => {
                     </span>
                     <span className="flex my-1">
                       <h4>Genre:</h4>
-                      <p>{filterGenres(movieUp.genre_ids).join(",")||"NaN"}</p>
+                      <p>
+                        {filterGenres(movieUp.genre_ids).join(",") || "NaN"}
+                      </p>
                     </span>
                     <span className="flex flex-col">
                       <h4>Casts:</h4>
@@ -290,7 +318,7 @@ const Overview = () => {
                                 <img
                                   src={
                                     cast.profile_path
-                                      ? `${baseURL}${cast.profile_path}`
+                                      ? `${API_CONFIG.TMDB_IMAGE_BASE_URL}/${API_CONFIG.TMDB_IMAGE_SIZES.profile.medium}${cast.profile_path}`
                                       : `https://placehold.co/65x100/000000/FFF`
                                   }
                                   alt={`${cast.name}`}
@@ -309,15 +337,24 @@ const Overview = () => {
                           ))}
                         </div>
                       ) : (
-                        <p>Loading ...</p>
+                        <></>
                       )}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-            
-            {showPopup && vidKey.length > 0 && <YoutubeTrailer handleClose={togglePopup} vidId={vidKey[Math.floor(Math.random() * (vidKey.length-1 + 1)) + 0]} />}
+
+            {showPopup && vidKey.length > 0 && (
+              <YoutubeTrailer
+                handleClose={togglePopup}
+                vidId={
+                  vidKey[
+                    Math.floor(Math.random() * (vidKey.length - 1 + 1)) + 0
+                  ]
+                }
+              />
+            )}
           </>
         )}
         {serieUp.id !== 0 && (
@@ -327,7 +364,7 @@ const Overview = () => {
               style={{
                 backgroundPosition: "center",
                 backgroundSize: "cover",
-                backgroundImage: `url(${baseURL}${serieUp.backdrop_path})`,
+                backgroundImage: `url(${API_CONFIG.TMDB_IMAGE_BASE_URL}/${API_CONFIG.TMDB_IMAGE_SIZES.backdrop.large}${serieUp.backdrop_path})`,
                 backgroundRepeat: "no-repeat",
               }}
             ></div>
@@ -340,7 +377,7 @@ const Overview = () => {
               >
                 <div className="flex justify-center items-center w-2/5 sm:w-full">
                   <img
-                    src={`${baseURL}${serieUp.poster_path}`}
+                    src={`${API_CONFIG.TMDB_IMAGE_BASE_URL}/${API_CONFIG.TMDB_IMAGE_SIZES.poster.large}${serieUp.poster_path}`}
                     alt="Serie Poster"
                     className="h-2/3 rounded-sm w-1/2 sm:w-36 sm:h-52 lg:w-44 lg:h-52 xl:w-48 xl:h-64"
                   />
@@ -356,8 +393,12 @@ const Overview = () => {
                     }}
                   >
                     <h3>
-                      {(serieUp.title || serieUp.name || serieUp.original_title)
-                        .toUpperCase()}
+                      {(
+                        serieUp.title ||
+                        serieUp.name ||
+                        serieUp.original_title ||
+                        ""
+                      ).toUpperCase()}
                     </h3>
                   </div>
                   <div className="font-['Barlow'] text-sm font-light">
@@ -367,7 +408,7 @@ const Overview = () => {
                         className="flex cursor-pointer mr-8 hover:text-[#f3b632f4] duration-200 items-center justify-center"
                         onClick={togglePopup}
                       >
-                        <Videocam fontSize="small"/>
+                        <Videocam fontSize="small" />
                         <p>Trailer</p>
                       </button>
                       <div className="mr-8">
@@ -376,16 +417,32 @@ const Overview = () => {
                     </span>
                     <span></span>
                   </div>
-                  <Link to={`/watch/${(serieUp?.title || serieUp?.name).toLowerCase().split(" ").join("-")}-${serieUp?.id}`} state={{serieUp}}>
-                    <button className="sm:w-full bg-black rounded-md p-3 border-l-4 border-l-[#f3b83ae8] mt-4 font-['Barlow_Condensed'] flex items-center justify-center hover:opacity-50 hover:bg-[#f3b83ae8] hover:text-black duration-200 ease-in-out hover:border-l-0 hover:border-neutral-900 w-32">
-                      <PlayCircle />
-                      <span className="w-full">WATCH NOW</span>
+                  {isLikelyAvailable(serieUp.release_date) ? (
+                    <Link
+                      to={`/watch/${(serieUp?.title || serieUp?.name || "")
+                        .toLowerCase()
+                        .split(" ")
+                        .join("-")}-${serieUp?.id}`}
+                      state={{ serieUp }}
+                    >
+                      <button className="sm:w-full bg-black rounded-md p-3 border-l-4 border-l-[#f3b83ae8] mt-4 font-['Barlow_Condensed'] flex items-center justify-center hover:opacity-50 hover:bg-[#f3b83ae8] hover:text-black duration-200 ease-in-out hover:border-l-0 hover:border-neutral-900 w-32">
+                        <PlayCircle />
+                        <span className="w-full">WATCH NOW</span>
+                      </button>
+                    </Link>
+                  ) : (
+                    <button
+                      disabled
+                      className="sm:w-full bg-gray-700 rounded-md p-3 border-l-4 border-l-yellow-500 mt-4 font-['Barlow_Condensed'] flex items-center justify-center cursor-not-allowed opacity-60 w-32"
+                    >
+                      <Schedule />
+                      <span className="w-full">COMING SOON</span>
                     </button>
-                  </Link>
+                  )}
                   <div className="w-full p-2 font-['Barlow'] font-light sm:px-4">
                     <h4>Overview:</h4>
                     <p className="font-['Barlow'] italic font-light h-fit text-sm">
-                      {serieUp.overview||"NaN"}
+                      {serieUp.overview || "NaN"}
                     </p>
                     <span className="flex justify-between w-1/2 my-1 sm:w-3/4">
                       <div className="flex">
@@ -399,7 +456,9 @@ const Overview = () => {
                     </span>
                     <span className="flex my-1 w-full">
                       <h4>Genre:</h4>
-                      <p>{filterGenres(serieUp.genre_ids).join(",")||"NaN"}</p>
+                      <p>
+                        {filterGenres(serieUp.genre_ids).join(",") || "NaN"}
+                      </p>
                     </span>
                     <span className="flex flex-col">
                       <h4>Casts:</h4>
@@ -422,7 +481,7 @@ const Overview = () => {
                                 <img
                                   src={
                                     cast.profile_path
-                                      ? `${baseURL}${cast.profile_path}`
+                                      ? `${API_CONFIG.TMDB_IMAGE_BASE_URL}/${API_CONFIG.TMDB_IMAGE_SIZES.profile.medium}${cast.profile_path}`
                                       : `https://placehold.co/65x100/000000/FFF`
                                   }
                                   alt={`${cast.name}`}
@@ -446,49 +505,68 @@ const Overview = () => {
                     </span>
                   </div>
                 </div>
+              </div>
+              <div className="w-full px-6 relative">
+                <div className="object-contain text-white flex rounded-md w-32 p-2 border justify-between font-light font-['Barlow'] cursor-pointer bg-black">
+                  <ListOutlined />
+                  <select
+                    name="Seasons"
+                    id="Seasons"
+                    className="bg-transparent outline-none w-24 cursor-pointer text-white"
+                    onChange={(e) => {
+                      const sn = parseInt(e.target.value.split(" ")[1], 10);
+                      fetchEpisodes(serieUp.id, sn);
+                      setSeasonAir(sn);
+                      setEpisodeAir(1);
+                    }}
+                  >
+                    {seasons.map((season: Season) =>
+                      season.season_number !== 0 ? (
+                        <option
+                          value={`Season ${season.season_number}`}
+                          key={season.id}
+                          className="bg-black"
+                        >{`Season ${season.season_number}`}</option>
+                      ) : null
+                    )}
+                  </select>
                 </div>
-                <div className="w-full px-6 relative">
-                  <div className="object-contain text-white flex rounded-md w-32 p-2 border justify-between font-light font-['Barlow'] cursor-pointer bg-black">
-                    <ListOutlined/>
-                    <select 
-                      name="Seasons" 
-                      id="Seasons" 
-                      className="bg-transparent outline-none w-24 cursor-pointer text-white"
-                      onChange={(e)=>{
-                        const sn = parseInt(e.target.value.split(" ")[1],10);
-                        fetchEpisodes(serieUp.id,sn);
-                        setSeasonAir(sn);
-                        setEpisodeAir(1);
-                      }}
-                    >
-                      {seasons.map((season:Season)=>(
-                        season.season_number !== 0?
-                        (
-                        <option value={`Season ${season.season_number}`} key={season.id} className="bg-black">{`Season ${season.season_number}`}</option>
-                        ):null
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex overflow-y-hidden overflow-x-scroll py-5" style={{ scrollbarWidth: "none" }}>
-                  {episodes.map((episode:Episode) => (
-                     <div key={episode.id}>
-                       <Link to={`/watch/${(serieUp?.title || serieUp?.name).toLowerCase().split(" ").join("-")}-${serieUp?.id}`} state={{serieUp,seasonSelected,episodeSelected}}
-                          onMouseEnter={()=>{
-                            handleEpisode(episode.episode_number);
-                          }}
-                        >
-                         <EpisodeComponent episode={episode} playing={false}/>
-                       </Link>
-                     </div>
+                <div
+                  className="flex overflow-y-hidden overflow-x-scroll py-5"
+                  style={{ scrollbarWidth: "none" }}
+                >
+                  {episodes.map((episode: Episode) => (
+                    <div key={episode.id}>
+                      <Link
+                        to={`/watch/${(serieUp?.title || serieUp?.name || "")
+                          .toLowerCase()
+                          .split(" ")
+                          .join("-")}-${serieUp?.id}`}
+                        state={{ serieUp, seasonSelected, episodeSelected }}
+                        onMouseEnter={() => {
+                          handleEpisode(episode.episode_number);
+                        }}
+                      >
+                        <EpisodeComponent episode={episode} playing={false} />
+                      </Link>
+                    </div>
                   ))}
-                  </div>
                 </div>
               </div>
-            {showPopup && vidKey.length > 0 && <YoutubeTrailer handleClose={togglePopup} vidId={vidKey[Math.floor(Math.random() * (vidKey.length-1 + 1)) + 0]}/>}
+            </div>
+            {showPopup && vidKey.length > 0 && (
+              <YoutubeTrailer
+                handleClose={togglePopup}
+                vidId={
+                  vidKey[
+                    Math.floor(Math.random() * (vidKey.length - 1 + 1)) + 0
+                  ]
+                }
+              />
+            )}
           </>
         )}
       </div>
-      <Footer />
     </div>
   );
 };

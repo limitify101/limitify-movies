@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Star, FilterAlt } from "@mui/icons-material";
-import Footer from "../Components/Footer";
 import Pagination from "../Components/Pagination";
 import { useLocation } from "react-router-dom";
 import { useLayoutEffect } from "react";
@@ -161,7 +160,6 @@ const Search: React.FC = () => {
         
         {showPopup && <FilterPopUp handleClose={togglePopup} search={true}/>}
       </div>
-      <Footer />
     </div>
   );
 }

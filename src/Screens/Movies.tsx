@@ -1,36 +1,37 @@
-import { FilterAlt} from "@mui/icons-material";
-import { useState,useEffect } from "react"
-import axios from '../axios';
+import { FilterAlt } from "@mui/icons-material";
+import { useState, useEffect, useLayoutEffect } from "react";
+import axios from "../axios";
 import requests from "../request";
-import { Link } from "react-router-dom";
-import { Star } from "@mui/icons-material";
-import Footer from "../Components/Footer";
+import { Link, useLocation } from "react-router-dom";
+import { Star, Schedule } from "@mui/icons-material";
 import Pagination from "../Components/Pagination";
-import { useLayoutEffect } from "react";
 import FilterPopUp from "../Components/FilterPopUp";
-import { bouncy } from 'ldrs'
+import OptimizedImage from "../Components/OptimizedImage";
+import { filterReleasedContent, ContentItem } from "../utils/contentValidator";
+import { isLikelyAvailable } from "../utils/videoAvailability";
+import { bouncy } from "ldrs";
 
-bouncy.register()
+bouncy.register();
 
 interface Movie {
-  id: number,
-  backdrop_path: string,
-  poster_path: string,
-  title: string,
-  media_type: string,
-  vote_average: number,
-  name:string,
-  first_air_date: string,
-  release_date: string,
+  id: number;
+  backdrop_path: string;
+  poster_path: string;
+  title: string;
+  media_type: string;
+  vote_average: number;
+  name: string;
+  first_air_date: string;
+  release_date: string;
 }
 
 function Movies() {
-  const [page,setPage] = useState(1);
-  const [movies,setMovies] = useState<Movie[]>([]);
-  const [total_pages,setTotalPages] = useState(1);
+  const location = useLocation();
+  const [page, setPage] = useState(1);
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [total_pages, setTotalPages] = useState(1);
   const [showPopup, setShowPopup] = useState<boolean>(false);
-  const baseURL = "https://image.tmdb.org/t/p/original/"
-  
+
   const handlePagination = (newPage: number) => {
     setPage(newPage);
   };
@@ -38,93 +39,121 @@ function Movies() {
     setShowPopup(!showPopup);
   };
   useLayoutEffect(() => {
-    document.documentElement.scrollTo({ top:0, left:0, behavior: "instant" });
-}, [location.pathname]);
+    document.documentElement.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location.pathname]);
 
-  useEffect(()=>{
+  useEffect(() => {
     async function fetchData() {
-        try{
-            const fetchURL: string = `${requests.fetchMovieList}&page=${page}&sort_by=popularity_desc`
-            const request = await axios.get(fetchURL);
-            const fetchedMovies = request.data.results;
-            // const receivedPages = request.data.total_pages;
-            setMovies(fetchedMovies);
-            setTotalPages(500);
-            return request;
-        }
-        catch(error){
-            console.log("Error fetching data:",error);
-        }
+      try {
+        // V2: Use release-filtered endpoint for accurate content
+        const fetchURL: string = `${requests.fetchReleasedMovies}&page=${page}`;
+        const request = await axios.get(fetchURL);
+        const fetchedMovies = request.data.results;
+
+        // Additional client-side filtering for extra accuracy
+        const validMovies = filterReleasedContent(
+          fetchedMovies as ContentItem[],
+          10
+        ) as Movie[];
+
+        setMovies(validMovies);
+        setTotalPages(Math.min(request.data.total_pages || 500, 500));
+        return request;
+      } catch (error) {
+        console.log("Error fetching data:", error);
+      }
     }
     fetchData();
-  },[page]);
+  }, [page]);
   return (
-    <div className="w-screen mt-20 p-0 relative m-0 h-full lg:w-screen">
-        <div className="px-6 py-4 min-h-screen">
-          <div className="m-0">
-            <span className="flex border-l-4 border-l-[#f3b83ae8] text-2xl px-2 items-center">
-              <h2 className="font-['Barlow'] opacity-60 sm:text-xl lg:text-xl xl:text-xl">Movies Filter Results</h2>
-              <FilterAlt style={{fontSize:"30px"}} className="cursor-pointer hover:text-[#f3b83ae8] transition duration-300 ease-in-out opacity-80" onClick={togglePopup}/>
-            </span>
-          </div>
-          <div className="mt-2">
-              <span className="object-contain flex items-center justify-center p-4 opacity-70">
-              <Pagination
-                currentPage={page}
-                totalPages={total_pages}
-                onPageChange={handlePagination}
-              />
-              </span>
-          </div>
-          {movies && movies.length>0?(
-            <div className="px-6 grid grid-cols-4 h-full items-center justify-center mt-4 sm:grid-cols-1 lg:px-4 scroll-m-0 xl:px-4 xl:grid-cols-3 md:grid-cols-2">
-            {movies.map(movie=>(
-                  <Link to={`/movies/${(movie?.title || movie?.name).toLowerCase().split(" ").join("-")}-${movie?.id}`} state={{movie}} className="m-4 flex flex-col justify-center p-0 items-center hover:opacity-60 transition ease-in-out duration-700 hover:scale-105" key={movie.id}>
-                      <div key={movie.id} className="w-64 flex flex-col justify-between bg-black lg:w-52">
-                          <img src={ movie?.backdrop_path? `${baseURL}${
-                              movie?.backdrop_path||movie?.poster_path
-                          }`:`https://placehold.co/100x60/000000/FFF`}
-                          className='object-cover min-h-40 bg-black'
-                          alt={movie?.name} />
+    <div className="w-screen mt-20 p-0 m-0 min-h-screen">
+      <div className="px-6 py-4 min-h-screen">
+        <div className="m-0">
+          <span className="flex border-l-4 border-l-[#f3b83ae8] text-2xl px-2 items-center">
+            <h2 className="font-['Barlow'] opacity-60 sm:text-xl lg:text-xl xl:text-xl">
+              Movies Filter Results
+            </h2>
+            <FilterAlt
+              style={{ fontSize: "30px" }}
+              className="cursor-pointer hover:text-[#f3b83ae8] transition duration-300 ease-in-out opacity-80"
+              onClick={togglePopup}
+            />
+          </span>
+        </div>
 
-                          <div className="px-2 w-full min-h-20 -my-2" style={{
-                              background: "linear-gradient(10deg, transparent, rgba(0, 0, 0, .897))"
-                          }}>
-                              <span className="flex justify-between">                                
-                                  <span style={{color:"#eccbafdd"}} className="flex font-['Barlow']">
-                                          <Star style={{color:"#eccbafdd"}}/>
-                                          <p className="mx-1">
-                                              {Math.round(movie?.vote_average).toFixed(1)}
-                                          </p>
-                                  </span>
-                              </span>
-                              <span className="font-['Barlow'] lg:text-sm xl:text-sm sm:text-sm">
-                                  <p className="mt-2">{movie?.title || movie?.name}</p>
-                              </span>
-                              <span style={{color:"#eccbafdd"}} className="flex font-['Barlow_Condensed'] text-sm">
-                                  <p>{movie?.first_air_date||movie?.release_date}</p>
-                              </span>
-                          </div>
-                      </div>
-                      
-                  </Link>
-              ))}
-              {showPopup && <FilterPopUp handleClose={togglePopup} search={false}/>}
+        {movies && movies.length > 0 ? (
+          <div className="gap-12 grid grid-cols-4 h-full items-center justify-center mt-4 sm:grid-cols-1 scroll-m-0 xl:grid-cols-3 md:grid-cols-2">
+            {movies.map((movie) => (
+              <Link
+                to={`/movies/${movie?.id}`}
+                state={{ movie }}
+                className="m-4 flex-shrink-0 transition ease-in-out duration-300 hover:scale-105 group"
+                key={movie.id}
+              >
+                <div className="w-80 h-[240px] sm:w-64 sm:h-[210px] lg:w-72 lg:h-[220px] xl:w-80 xl:h-[240px] md:w-72 md:h-[220px] flex flex-col relative rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow duration-300 bg-zinc-900">
+                  {/* Availability Badge */}
+                  {!isLikelyAvailable(movie.release_date) && (
+                    <div className="absolute top-2 right-2 z-10 bg-yellow-500 text-black px-2 py-1 rounded-md flex items-center gap-1 text-xs font-bold shadow-lg">
+                      <Schedule fontSize="small" />
+                      <span>SOON</span>
+                    </div>
+                  )}
+
+                  <div className="h-2/3 w-full overflow-hidden">
+                    <OptimizedImage
+                      path={movie?.backdrop_path || movie?.poster_path}
+                      alt={movie?.title || movie?.name || "Movie"}
+                      type="backdrop"
+                      size="medium"
+                      className="w-full h-full bg-black group-hover:opacity-80 transition-opacity duration-300"
+                    />
+                  </div>
+
+                  <div className="px-3 py-2 flex-1 flex flex-col bg-gradient-to-t from-black via-zinc-900 to-transparent">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-['Barlow_Condensed'] bg-[#f3b83ae8] px-2 py-0.5 rounded-md text-black text-xs font-bold">
+                        MOVIE
+                      </span>
+                      <span className="flex items-center gap-1 text-yellow-400">
+                        <Star fontSize="small" />
+                        <span className="font-['Barlow'] text-sm font-semibold">
+                          {Math.round(movie?.vote_average).toFixed(1)}
+                        </span>
+                      </span>
+                    </div>
+
+                    <h3 className="font-['Barlow'] text-white text-sm font-medium line-clamp-2 mb-1 flex-1">
+                      {movie?.title || movie?.name}
+                    </h3>
+
+                    <p className="text-gray-400 font-['Barlow_Condensed'] text-xs truncate">
+                      {movie?.first_air_date || movie?.release_date}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+            {showPopup && (
+              <FilterPopUp handleClose={togglePopup} search={false} />
+            )}
           </div>
-          ):(
-            <div className="w-full flex items-center justify-center h-96">
-            <l-bouncy
-            size="45"
-            speed="1.75"
-            color="#f3b83ae8" 
-            ></l-bouncy>
+        ) : (
+          <div className="w-full flex items-center justify-center h-96">
+            <l-bouncy size="45" speed="1.75" color="#f3b83ae8"></l-bouncy>
+          </div>
+        )}
+        <div className="mt-2">
+          <span className="object-contain flex items-center justify-center p-4 opacity-70">
+            <Pagination
+              currentPage={page}
+              totalPages={total_pages}
+              onPageChange={handlePagination}
+            />
+          </span>
         </div>
-          )}
-          
-        </div>
-        <Footer/>
+      </div>
     </div>
-  )
+  );
 }
 
-export default Movies
+export default Movies;
